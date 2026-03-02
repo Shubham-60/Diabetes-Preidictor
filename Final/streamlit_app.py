@@ -51,6 +51,27 @@ EDUCATION_OPTIONS = {
     "6 — College 4 years or more (College graduate)": 6,
 }
 EDUCATION_LABELS_BY_CODE = {value: label for label, value in EDUCATION_OPTIONS.items()}
+FIELD_LABELS = {
+    "Smoker": "Smoker",
+    "PhysActivity": "Physically Active",
+    "Fruits": "Regular Fruit Intake",
+    "Veggies": "Regular Vegetable Intake",
+    "HvyAlcoholConsump": "Heavy Alcohol Consumption",
+    "HighBP": "High Blood Pressure",
+    "HighChol": "High Cholesterol",
+    "CholCheck": "Recent Cholesterol Check",
+    "DiffWalk": "Difficulty Walking",
+    "AnyHealthcare": "Healthcare Coverage",
+    "NoDocbcCost": "Skipped Doctor Due to Cost",
+    "BMI": "Body Mass Index (BMI)",
+    "GenHlth": "General Health",
+    "MentHlth": "Poor Mental Health Days",
+    "PhysHlth": "Poor Physical Health Days",
+    "Sex": "Sex",
+    "Age": "Age",
+    "Education": "Education Level",
+    "Income": "Income Level",
+}
 
 
 def init_session_state() -> None:
@@ -982,15 +1003,15 @@ def render_form() -> None:
         with col1:
             smoker = st.toggle("Smoker", value=defaults.get("smoker", False))
             render_helper("Select Yes if you currently smoke regularly.")
-            phys_activity = st.toggle("PhysActivity", value=defaults.get("phys_activity", True))
+            phys_activity = st.toggle("Physically Active", value=defaults.get("phys_activity", True))
             render_helper("Select Yes if you are physically active.")
-            fruits = st.toggle("Fruits", value=defaults.get("fruits", True))
+            fruits = st.toggle("Regular Fruit Intake", value=defaults.get("fruits", True))
             render_helper("Select Yes if fruits are part of your regular diet.")
         with col2:
-            veggies = st.toggle("Veggies", value=defaults.get("veggies", True))
+            veggies = st.toggle("Regular Vegetable Intake", value=defaults.get("veggies", True))
             render_helper("Select Yes if vegetables are part of your regular diet.")
             alcohol = st.toggle(
-                "HvyAlcoholConsump",
+                "Heavy Alcohol Consumption",
                 value=defaults.get("alcohol", False),
             )
             render_helper("Select Yes if heavy alcohol consumption applies.")
@@ -1001,18 +1022,18 @@ def render_form() -> None:
         section_header("Section 2 — Medical History", "Known clinical and access-related history", accent="purple")
         col1, col2 = st.columns(2, gap="large")
         with col1:
-            high_bp = st.toggle("HighBP", value=defaults.get("high_bp", False))
+            high_bp = st.toggle("High Blood Pressure", value=defaults.get("high_bp", False))
             render_helper("History of high blood pressure.")
-            high_chol = st.toggle("HighChol", value=defaults.get("high_chol", False))
+            high_chol = st.toggle("High Cholesterol", value=defaults.get("high_chol", False))
             render_helper("History of high cholesterol.")
-            chol_check = st.toggle("CholCheck", value=defaults.get("chol_check", True))
+            chol_check = st.toggle("Recent Cholesterol Check", value=defaults.get("chol_check", True))
             render_helper("Had cholesterol checked in recent care visits.")
         with col2:
-            diff_walk = st.toggle("DiffWalk", value=defaults.get("diff_walk", False))
+            diff_walk = st.toggle("Difficulty Walking", value=defaults.get("diff_walk", False))
             render_helper("Difficulty in walking or climbing stairs.")
-            any_healthcare = st.toggle("AnyHealthcare", value=defaults.get("any_healthcare", True))
+            any_healthcare = st.toggle("Healthcare Coverage", value=defaults.get("any_healthcare", True))
             render_helper("Access to healthcare coverage.")
-            no_doc_cost = st.toggle("NoDocbcCost", value=defaults.get("no_doc_cost", False))
+            no_doc_cost = st.toggle("Skipped Doctor Due to Cost", value=defaults.get("no_doc_cost", False))
             render_helper("Could not visit a doctor due to cost.")
 
     st.write("")
@@ -1022,7 +1043,7 @@ def render_form() -> None:
         col1, col2 = st.columns(2, gap="large")
         with col1:
             bmi = st.number_input(
-                "BMI",
+                "Body Mass Index (BMI)",
                 min_value=10.0,
                 max_value=60.0,
                 value=float(defaults.get("bmi", 26.8)),
@@ -1030,7 +1051,7 @@ def render_form() -> None:
             )
             render_helper("Body Mass Index range: 10 to 60.")
             gen_hlth = st.slider(
-                "GenHlth",
+                "General Health",
                 min_value=1,
                 max_value=5,
                 value=int(defaults.get("gen_hlth", 3)),
@@ -1038,14 +1059,14 @@ def render_form() -> None:
             render_helper("General health rating: 1 (excellent) to 5 (poor).")
         with col2:
             ment_hlth = st.slider(
-                "MentHlth (days)",
+                "Poor Mental Health Days",
                 min_value=0,
                 max_value=30,
                 value=int(defaults.get("ment_hlth", 4)),
             )
             render_helper("Number of poor mental health days in last 30 days.")
             phys_hlth = st.slider(
-                "PhysHlth (days)",
+                "Poor Physical Health Days",
                 min_value=0,
                 max_value=30,
                 value=int(defaults.get("phys_hlth", 3)),
@@ -1080,7 +1101,7 @@ def render_form() -> None:
             if default_education_label not in education_options:
                 default_education_label = EDUCATION_LABELS_BY_CODE.get(default_education_code, education_options[3])
             education_label = st.selectbox(
-                "Education",
+                "Education Level",
                 options=education_options,
                 index=education_options.index(default_education_label),
             )
@@ -1092,7 +1113,7 @@ def render_form() -> None:
             if default_income_label not in income_options:
                 default_income_label = income_options[4]
             income_label = st.selectbox(
-                "Income",
+                "Income Level",
                 options=income_options,
                 index=income_options.index(default_income_label),
             )
@@ -1253,7 +1274,7 @@ def render_result() -> None:
 
     factor_cards = [
         {
-            "title": "HighBP",
+            "title": "High Blood Pressure",
             "value": "Yes" if high_bp_value == 1 else "No",
             "score": clamp(float(high_bp_value)),
         },
@@ -1263,7 +1284,7 @@ def render_result() -> None:
             "score": clamp(bmi_value / 60),
         },
         {
-            "title": "GenHlth",
+            "title": "General Health",
             "value": f"{gen_hlth_value}/5",
             "score": clamp(gen_hlth_value / 5),
         },
@@ -1415,7 +1436,7 @@ def render_result() -> None:
                 pretty_value = display_value(key, value)
                 rows += (
                     f"<div class='summary-row compact'>"
-                    f"<div class='summary-key'>{key}</div>"
+                    f"<div class='summary-key'>{FIELD_LABELS.get(key, key)}</div>"
                     f"<div class='summary-value'>{pretty_value}</div>"
                     f"</div>"
                 )
