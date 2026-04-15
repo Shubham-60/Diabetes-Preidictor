@@ -215,6 +215,56 @@ The application:
 
 % --------------------------------------------------
 
+\section{Advanced RAG Refactor (FAISS + Gemini)}
+
+The project was refactored from a baseline retrieval setup to an advanced document-grounded RAG stack with vector indexing and reranking.
+
+\subsection*{System Flow}
+
+\begin{center}
+Input $\rightarrow$ ML Prediction $\rightarrow$ Factor Extraction $\rightarrow$ PDF Loading $\rightarrow$ Chunking $\rightarrow$ Embedding $\rightarrow$ FAISS Search $\rightarrow$ CrossEncoder Rerank $\rightarrow$ Prompt $\rightarrow$ Gemini Output
+\end{center}
+
+\subsection*{Vector Database and Embeddings}
+
+\begin{itemize}
+\item PDF guidelines are parsed using PyPDF2.
+\item Text is chunked into fixed-length passages.
+\item Sentence embeddings are generated with \texttt{all-MiniLM-L6-v2}.
+\item Embeddings are indexed with FAISS (L2 similarity index).
+\item Top-k relevant chunks are retrieved for each user-specific risk query.
+\end{itemize}
+
+\subsection*{Reranking Layer}
+
+Initial FAISS results are reranked using a CrossEncoder model (\texttt{cross-encoder/ms-marco-MiniLM-L-6-v2}) to improve semantic relevance before prompt construction.
+
+\subsection*{Prompt Grounding and Generation}
+
+The final prompt includes:
+\begin{itemize}
+\item ML probability and risk level
+\item Extracted risk factors
+\item Reranked guideline context
+\item Recommended specialists
+\end{itemize}
+
+Gemini is used for the final response generation with responsible AI disclaimers and non-diagnostic framing.
+
+\subsection*{LoRA Configuration (Report Scope)}
+
+For future fine-tuning experiments, a LoRA configuration is planned with:
+\begin{itemize}
+\item rank $r=8$
+\item \texttt{lora\_alpha=16}
+\item target modules: \texttt{q\_proj}, \texttt{v\_proj}
+\item dropout $=0.1$
+\end{itemize}
+
+This is documented for extensibility and was not executed in the current deployment.
+
+% --------------------------------------------------
+
 \section{Project Resources}
 
 \begin{itemize}

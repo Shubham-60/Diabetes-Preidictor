@@ -68,7 +68,6 @@ flowchart TD
 ## 🔗 Quick Links
 
 - Live app: [Diabetes Risk Predictor](https://diabetespreidictor.streamlit.app/)
-- Implementation details: [Final/README.md](Final/README.md)
 
 ## 👥 Team
 
