@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
+from agent.patient_mapping import build_rag_profile, map_inputs_for_llm
+
 
 def build_source_snippets(retrieved: Sequence[dict[str, Any]], reranked_texts: Sequence[str], limit: int = 2) -> str:
     snippets: list[str] = []
@@ -60,8 +62,10 @@ def run_patient_workflow(
 
         response_fn = generate_ai_response
 
-    prompt_data = dict(raw_inputs)
-    prompt_data.update(model_features)
+    # Keep patient-facing prompt values human-readable.
+    # Model features are still used for prediction and specialist routing.
+    prompt_data = map_inputs_for_llm(raw_inputs)
+    rag_profile = build_rag_profile(prompt_data)
 
     workflow = graph_builder()
     final_state = workflow.invoke(
@@ -69,6 +73,7 @@ def run_patient_workflow(
             "data": raw_inputs,
             "model_features": model_features,
             "prompt_data": prompt_data,
+            "rag_profile": rag_profile,
             "predict": lambda _: probability,
             "extract_factors": factor_fn,
             "doctor_fn": doctor_fn,

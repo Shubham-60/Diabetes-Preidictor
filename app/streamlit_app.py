@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from agent.langgraph_flow import build_graph
+from agent.patient_mapping import map_inputs_for_llm
 from agent.workflow import run_patient_workflow
 
 THRESHOLD = 0.58
@@ -44,23 +45,24 @@ SCALER_PATH = APP_DIR / "models" / "scaler.pkl"
 ENV_PATH = APP_DIR / ".env"
 
 INCOME_OPTIONS = {
-    "1 — Less than $10,000": 1,
-    "2 — $10,000 to < $15,000": 2,
-    "3 — $15,000 to < $20,000": 3,
-    "4 — $20,000 to < $25,000": 4,
-    "5 — $25,000 to < $35,000": 5,
-    "6 — $35,000 to < $50,000": 6,
-    "7 — $50,000 to < $75,000": 7,
-    "8 — $75,000 or more": 8,
+    "Less than $10,000": 1,
+    "$10,000 to $15,000": 2,
+    "$15,000 to $20,000": 3,
+    "$20,000 to $25,000": 4,
+    "$25,000 to $35,000": 5,
+    "$35,000 to $50,000": 6,
+    "$50,000 to $75,000": 7,
+    "$75,000 or more": 8,
 }
 EDUCATION_OPTIONS = {
-    "1 — Never attended school or only kindergarten": 1,
-    "2 — Grades 1 through 8 (Elementary)": 2,
-    "3 — Grades 9 through 11 (Some high school)": 3,
-    "4 — Grade 12 or GED (High school graduate)": 4,
-    "5 — College 1 year to 3 years (Some college or technical school)": 5,
-    "6 — College 4 years or more (College graduate)": 6,
+    "Never attended school or only kindergarten": 1,
+    "Grades 1 through 8 (Elementary)": 2,
+    "Grades 9 through 11 (Some high school)": 3,
+    "Grade 12 or GED (High school graduate)": 4,
+    "College 1 year to 3 years (Some college or technical school)": 5,
+    "College 4 years or more (College graduate)": 6,
 }
+INCOME_LABELS_BY_CODE = {value: label for label, value in INCOME_OPTIONS.items()}
 EDUCATION_LABELS_BY_CODE = {value: label for label, value in EDUCATION_OPTIONS.items()}
 FIELD_LABELS = {
     "Smoker": "Smoker",
@@ -968,6 +970,27 @@ def predict_probability(features: dict) -> float:
     return max(0.0, min(float(model.predict_proba(transformed)[0][1]), 1.0))
 
 
+def _debug_tracing_enabled() -> bool:
+    return os.getenv("DIABETES_DEBUG_TRACE", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _short_text(text: str, limit: int = 500) -> str:
+    compact = " ".join(str(text).split())
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[:limit]}..."
+
+
+def _debug_console(title: str, payload) -> None:
+    if not _debug_tracing_enabled():
+        return
+    print(f"\n[DIABETES-DEBUG] {title}")
+    try:
+        print(json.dumps(payload, indent=2, default=str, ensure_ascii=True))
+    except Exception:
+        print(str(payload))
+
+
 def run_ai_pipeline(raw_inputs: dict, model_features: dict, probability: float):
     from agent.llm import generate_ai_response
     from agent.prompt import build_prompt
@@ -975,6 +998,18 @@ def run_ai_pipeline(raw_inputs: dict, model_features: dict, probability: float):
     from agent.reranker import rerank
     from agent.utils import extract_factors
     from agent.doctor import recommend_department
+
+    prompt_data = map_inputs_for_llm(raw_inputs)
+
+    _debug_console(
+        "Pipeline Input",
+        {
+            "raw_inputs": raw_inputs,
+            "model_features": model_features,
+            "probability": round(float(probability), 6),
+            "prompt_data": prompt_data,
+        },
+    )
 
     texts = load_docs_cached()
     chunks = chunk_text(texts)
@@ -992,6 +1027,27 @@ def run_ai_pipeline(raw_inputs: dict, model_features: dict, probability: float):
         rerank_fn=rerank,
         prompt_fn=build_prompt,
         response_fn=generate_ai_response,
+    )
+
+    debug_sources = []
+    for item in result.get("retrieved", [])[:3]:
+        debug_sources.append(
+            {
+                "source": item.get("source", "Guideline"),
+                "content_preview": _short_text(item.get("content", ""), 180),
+            }
+        )
+
+    _debug_console(
+        "RAG + LLM Output",
+        {
+            "factors": result.get("factors", []),
+            "specialists": result.get("specialists", []),
+            "retrieved_count": len(result.get("retrieved", [])),
+            "reranked_count": len(result.get("reranked_texts", [])),
+            "retrieved_preview": debug_sources,
+            "llm_response_preview": _short_text(result.get("ai_response", ""), 700),
+        },
     )
 
     return (
@@ -1147,8 +1203,21 @@ def render_form() -> None:
             "Stroke": 0, "HeartDiseaseorAttack": 0, "HvyAlcoholConsump": int(alcohol),
             "AnyHealthcare": int(any_healthcare), "NoDocbcCost": int(no_doc_cost), "GenHlth": int(gen_hlth),
             "MentHlth": int(ment_hlth), "PhysHlth": int(phys_hlth), "DiffWalk": int(diff_walk),
-            "Sex": 1 if sex == "Male" else 0, "Education": int(education), "Income": INCOME_OPTIONS[income_label],
+            "Sex": 1 if sex == "Male" else 0,
+            "Education": int(education),
+            "Income": INCOME_OPTIONS[income_label],
+            "EducationLabel": education_label,
+            "IncomeLabel": income_label,
         }
+
+        _debug_console(
+            "Predict Button Clicked",
+            {
+                "form_values": st.session_state.form_values,
+                "raw_inputs": st.session_state.raw_inputs,
+                "model_features": st.session_state.features,
+            },
+        )
 
         st.session_state.needs_prediction = True
         st.session_state.page = "loading"
@@ -1388,6 +1457,52 @@ def render_result() -> None:
 
     with st.container(border=True):
         section_header("Input Summary", "Feature values used for this prediction", accent="teal")
+
+        def format_summary_value(key: str, value):
+            yes_no_fields = {
+                "Smoker",
+                "PhysActivity",
+                "Fruits",
+                "Veggies",
+                "HvyAlcoholConsump",
+                "HighBP",
+                "HighChol",
+                "CholCheck",
+                "AnyHealthcare",
+                "NoDocbcCost",
+                "DiffWalk",
+            }
+
+            if key in yes_no_fields:
+                return "Yes" if int(value) == 1 else "No"
+
+            if key == "Sex":
+                return "Male" if int(value) == 1 else "Female"
+
+            if key == "Age":
+                return st.session_state.raw_inputs.get("Age", value)
+
+            if key == "Education":
+                return st.session_state.raw_inputs.get("EducationLabel", EDUCATION_LABELS_BY_CODE.get(int(value), value))
+
+            if key == "Income":
+                return st.session_state.raw_inputs.get("IncomeLabel", INCOME_LABELS_BY_CODE.get(int(value), value))
+
+            gen_hlth_labels = {
+                1: "Excellent",
+                2: "Very Good",
+                3: "Good",
+                4: "Fair",
+                5: "Poor",
+            }
+            if key == "GenHlth":
+                return f"{value} ({gen_hlth_labels.get(int(value), 'Unknown')})"
+
+            if key in {"MentHlth", "PhysHlth"}:
+                return f"{value} days"
+
+            return value
+
         grouped_features = {
             "Lifestyle": ["Smoker", "PhysActivity", "Fruits", "Veggies", "HvyAlcoholConsump"],
             "Medical History": ["HighBP", "HighChol", "CholCheck", "AnyHealthcare", "NoDocbcCost", "DiffWalk"],
@@ -1398,6 +1513,7 @@ def render_result() -> None:
             rows = ""
             for key in keys:
                 value = st.session_state.features.get(key, "-")
+                value = format_summary_value(key, value)
                 rows += f"<div class='summary-row'><div class='summary-key'>{FIELD_LABELS.get(key, key)}</div><div class='summary-value'>{value}</div></div>"
             with st.expander(group_name, expanded=(group_name == "Lifestyle")):
                 st.markdown(f"<div class='summary-compact'>{rows}</div>", unsafe_allow_html=True)

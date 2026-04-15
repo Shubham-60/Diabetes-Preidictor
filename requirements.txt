@@ -4,7 +4,8 @@ pandas
 scikit-learn
 joblib
 faiss-cpu
-sentence-transformers
+sentence-transformers>=4.0.2,<5
+transformers>=4.46,<5
 PyPDF2
 google-genai
 langchain-google-genai

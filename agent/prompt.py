@@ -3,7 +3,7 @@ Prompt Engineering Module
 Creates structured prompts for responsible medical AI responses.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List,Optional
 
 
 def build_prompt(
@@ -11,7 +11,7 @@ def build_prompt(
     prob: float,
     factors: List[str],
     context: str,
-    departments: List[str] = None
+    departments: Optional[List[str]] = None
 ) -> str:
     """
     Build a structured prompt for medical AI response
@@ -112,7 +112,9 @@ def format_patient_data(data: Dict[str, Any]) -> str:
         "Sex": "Sex",
         "Age": "Age",
         "Education": "Education Level",
-        "Income": "Income Level"
+        "Income": "Income Level",
+        "EducationLabel": "Education Level (Label)",
+        "IncomeLabel": "Income Level (Label)",
     }
     
     for key, value in data.items():

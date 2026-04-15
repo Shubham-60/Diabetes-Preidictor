@@ -37,8 +37,19 @@ def extract_factors(data):
     if data.get("HvyAlcoholConsump", 0) == 1:
         factors.append("High Alcohol Consumption")
 
-    # Age (dataset encoded categories)
-    if data.get("Age", 0) >= 8:
+    # Age: handle both encoded categories (1-13) and real age in years.
+    age_value = data.get("Age", 0)
+    try:
+        age_num = float(age_value)
+    except (TypeError, ValueError):
+        age_num = 0
+
+    # Encoded category (1-13): 8+ roughly maps to 55+ years.
+    if 0 < age_num <= 13 and age_num >= 8:
+        factors.append("Age-related Risk")
+
+    # Raw age in years.
+    if age_num > 13 and age_num >= 55:
         factors.append("Age-related Risk")
 
     # Fallback
