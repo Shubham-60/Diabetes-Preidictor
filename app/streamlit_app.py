@@ -1,4 +1,5 @@
 import os
+import json
 import sys
 import time
 from pathlib import Path
@@ -12,11 +13,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from agent.llm import generate_ai_response
-from agent.prompt import build_prompt
-from agent.rag_faiss import load_pdfs, chunk_text, create_index, search
-from agent.reranker import rerank
-from agent.utils import extract_factors
+from agent.langgraph_flow import build_graph
+from agent.workflow import run_patient_workflow
 
 THRESHOLD = 0.58
 FEATURE_ORDER = [
@@ -945,12 +943,21 @@ def load_model_artifacts():
 
 @st.cache_data(show_spinner=False)
 def load_docs_cached():
+    from agent.rag_faiss import load_pdfs
+
     return load_pdfs()
 
 
 @st.cache_resource(show_spinner=False)
 def build_index_cached(chunks):
+    from agent.rag_faiss import create_index
+
     return create_index(chunks)
+
+
+@st.cache_resource(show_spinner=False)
+def build_workflow_graph():
+    return build_graph()
 
 
 def predict_probability(features: dict) -> float:
@@ -961,43 +968,67 @@ def predict_probability(features: dict) -> float:
     return max(0.0, min(float(model.predict_proba(transformed)[0][1]), 1.0))
 
 
-def get_doctor_recommendation(factors):
-    departments = []
-    if "High Glucose" in factors:
-        departments.extend(["Endocrinologist", "Diabetologist"])
-    if "High BMI" in factors:
-        departments.append("Nutritionist / Dietitian")
-    if "Age Risk" in factors:
-        departments.append("General Physician")
-    return list(dict.fromkeys(departments)) or ["General Physician"]
-
-
 def run_ai_pipeline(raw_inputs: dict, model_features: dict, probability: float):
-    factors = extract_factors(raw_inputs)
-    query = " ".join(factors)
+    from agent.llm import generate_ai_response
+    from agent.prompt import build_prompt
+    from agent.rag_faiss import chunk_text, search
+    from agent.reranker import rerank
+    from agent.utils import extract_factors
+    from agent.doctor import recommend_department
+
     texts = load_docs_cached()
     chunks = chunk_text(texts)
     index, chunks = build_index_cached(chunks)
-    retrieved = search(query, index, chunks)
-    reranked_texts = rerank(query, [r["content"] for r in retrieved])
-    context = "\n".join(reranked_texts)
-    specialists = get_doctor_recommendation(factors)
+    result = run_patient_workflow(
+        raw_inputs=raw_inputs,
+        model_features=model_features,
+        probability=probability,
+        index=index,
+        chunks=chunks,
+        graph_builder=build_workflow_graph,
+        factor_fn=extract_factors,
+        doctor_fn=recommend_department,
+        search_fn=search,
+        rerank_fn=rerank,
+        prompt_fn=build_prompt,
+        response_fn=generate_ai_response,
+    )
 
-    prompt_data = dict(raw_inputs)
-    prompt_data.update(model_features)
-    prompt = build_prompt(prompt_data, probability, factors, context, specialists)
-    ai_response = generate_ai_response(prompt)
+    return (
+        result["factors"],
+        result["specialists"],
+        result["ai_response"],
+        result["source_context"],
+    )
 
-    source_snippets = []
-    for passage in reranked_texts[:2]:
-        source = "Guideline"
-        for item in retrieved:
-            if item["content"] == passage:
-                source = item.get("source", "Guideline")
-                break
-        source_snippets.append(f"[{source}] {passage[:180]}...")
 
-    return factors, specialists, ai_response, "\n".join(source_snippets)
+def parse_ai_response(text: str) -> dict:
+    fallback = {
+        "risk_level": "Unavailable",
+        "explanation": text.strip() or "AI explanation unavailable.",
+        "recommendations": [],
+        "preventive_measures": [],
+        "suggested_specialists": [],
+        "source_citations": [],
+        "disclaimer": "This assessment is a screening aid only and not a medical diagnosis. Please consult a qualified healthcare professional.",
+    }
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return {
+                "risk_level": str(parsed.get("risk_level", fallback["risk_level"])),
+                "explanation": str(parsed.get("explanation", fallback["explanation"])),
+                "recommendations": list(parsed.get("recommendations", [])),
+                "preventive_measures": list(parsed.get("preventive_measures", [])),
+                "suggested_specialists": list(parsed.get("suggested_specialists", [])),
+                "source_citations": list(parsed.get("source_citations", [])),
+                "disclaimer": str(parsed.get("disclaimer", fallback["disclaimer"])),
+            }
+    except Exception:
+        pass
+
+    return fallback
 
 
 def render_form() -> None:
@@ -1137,6 +1168,14 @@ def render_loading() -> None:
         try:
             probability = predict_probability(st.session_state.features)
             factors, specialists, ai_response, source_context = run_ai_pipeline(st.session_state.raw_inputs, st.session_state.features, probability)
+        except ImportError as error:
+            st.session_state.needs_prediction = False
+            st.error("Workflow dependencies are missing. Install the packages from requirements.txt and rerun the app.")
+            st.caption(str(error))
+            if st.button("Back to Form", use_container_width=True):
+                st.session_state.page = "form"
+                st.rerun()
+            return
         except Exception as error:
             st.session_state.needs_prediction = False
             st.error("Model inference failed. Ensure models/lr_model.pkl and models/scaler.pkl exist.")
@@ -1308,54 +1347,43 @@ def render_result() -> None:
         for specialist in st.session_state.specialists:
             st.write(f"• {specialist}")
 
-        # --- Parse AI Response ---
-        def parse_response(text):
-            sections = {"Risk Level": "", "Explanation": "", "Recommendations": "", "Preventive Measures": ""}
-            current = None
-            for line in text.split("\n"):
-                line = line.strip()
-                if "Risk Level:" in line:
-                    current = "Risk Level"
-                    sections[current] = line.replace("Risk Level:", "").strip()
-                elif "Explanation:" in line:
-                    current = "Explanation"
-                    sections[current] = line.replace("Explanation:", "").strip()
-                elif "Recommendations:" in line:
-                    current = "Recommendations"
-                    sections[current] = line.replace("Recommendations:", "").strip()
-                elif "Preventive Measures:" in line:
-                    current = "Preventive Measures"
-                    sections[current] = line.replace("Preventive Measures:", "").strip()
-                elif current:
-                    sections[current] += " " + line
-            return sections
-
-        parsed = parse_response(st.session_state.ai_response)
+        parsed = parse_ai_response(st.session_state.ai_response)
 
         # --- Risk Level ---
         st.markdown("### 🩺 Risk Assessment")
-        if "low" in parsed["Risk Level"].lower():
-            st.success(f"Risk Level: {parsed['Risk Level']}")
-        elif "medium" in parsed["Risk Level"].lower():
-            st.warning(f"Risk Level: {parsed['Risk Level']}")
+        risk_level = parsed["risk_level"]
+        if "low" in risk_level.lower():
+            st.success(f"Risk Level: {risk_level}")
+        elif "medium" in risk_level.lower():
+            st.warning(f"Risk Level: {risk_level}")
         else:
-            st.error(f"Risk Level: {parsed['Risk Level']}")
+            st.error(f"Risk Level: {risk_level}")
 
         # --- Explanation ---
         st.markdown("### 📋 Explanation")
-        st.write(parsed["Explanation"])
+        st.write(parsed["explanation"])
 
         # --- Recommendations ---
         st.markdown("### 💡 Recommendations")
-        st.write(parsed["Recommendations"])
+        for item in parsed["recommendations"]:
+            st.write(f"• {item}")
 
         # --- Preventive Measures ---
         st.markdown("### 🛡 Preventive Measures")
-        st.write(parsed["Preventive Measures"])
+        for item in parsed["preventive_measures"]:
+            st.write(f"• {item}")
+
+        st.markdown("### 🧭 Suggested Specialists")
+        for item in parsed["suggested_specialists"]:
+            st.write(f"• {item}")
+
+        st.markdown("### ⚖ Disclaimer")
+        st.caption(parsed["disclaimer"])
 
         # --- Source Context ---
         st.markdown("### 📚 Source")
-        for line in st.session_state.source_context.split("\n")[:2]:
+        combined_sources = parsed["source_citations"] or st.session_state.source_context.split("\n")[:2]
+        for line in combined_sources[:3]:
             st.caption(line)
 
     with st.container(border=True):

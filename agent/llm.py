@@ -1,8 +1,25 @@
 import os
+import json
 
 from google import genai
 
-
+FALLBACK_RESPONSE = {
+    "risk_level": "Unavailable",
+    "explanation": "AI guidance is currently unavailable, so only the model prediction can be shown right now.",
+    "recommendations": [
+        "Review the predicted risk score with a healthcare professional.",
+        "Continue monitoring blood pressure, BMI, and lifestyle habits.",
+        "Re-run the assessment after correcting any missing or inaccurate inputs.",
+    ],
+    "preventive_measures": [
+        "Maintain regular physical activity.",
+        "Follow a balanced diet with controlled sugar intake.",
+        "Schedule routine preventive health checkups.",
+    ],
+    "suggested_specialists": ["General Physician"],
+    "source_citations": [],
+    "disclaimer": "This assessment is a screening aid only and not a medical diagnosis. Please consult a qualified healthcare professional.",
+}
 
 def _get_client():
     api_key = os.getenv("GEMINI_API_KEY")
@@ -13,7 +30,7 @@ def _get_client():
 def generate_ai_response(prompt: str):
     client = _get_client()
     if client is None:
-        return "AI service unavailable. Set GEMINI_API_KEY to enable the generated report."
+        return json.dumps(FALLBACK_RESPONSE)
 
     try:
         response = client.models.generate_content(
@@ -22,4 +39,4 @@ def generate_ai_response(prompt: str):
         )
         return response.text
     except Exception:
-        return "AI service temporarily unavailable. Please try again."
+        return json.dumps(FALLBACK_RESPONSE)

@@ -1,6 +1,6 @@
 """
 Prompt Engineering Module
-Creates structured prompts for responsible medical AI responses
+Creates structured prompts for responsible medical AI responses.
 """
 
 from typing import Any, Dict, List
@@ -57,37 +57,24 @@ RETRIEVED MEDICAL CONTEXT (from certified guidelines):
 RECOMMENDED SPECIALISTS TO CONSULT:
 {departments_text}
 
-Based on the above information, generate a structured health report with the following sections:
+Return ONLY valid JSON with this schema:
+{{
+  "risk_level": string,
+  "explanation": string,
+  "recommendations": [string, string, string],
+  "preventive_measures": [string, string, string],
+  "suggested_specialists": [string],
+  "source_citations": [string],
+  "disclaimer": string
+}}
 
-Return STRICTLY in this format:
-
-Risk Level:
-Explanation:
-Recommendations:
-Preventive Measures:
-Suggested Doctor/Specialist to Consult:
-Disclaimer:
-
-1. **Risk Assessment**: Brief statement of the risk level based on ML prediction
-2. **Key Factors Explanation**: Explain the main health indicators and their significance (2-3 sentences)
-3. **Health Recommendations**: Provide 3-4 evidence-based recommendations (bullet points)
-4. **Preventive Measures**: Suggest lifestyle modifications and monitoring strategies
-5. **Specialist Consultation**: Recommend which specialists should be consulted based on risk factors
-6. **Important Disclaimer**: 
-
-⚠️ CRITICAL DISCLAIMERS:
-- This assessment is NOT a medical diagnosis
-- This system does NOT replace professional medical advice
-- Always consult qualified healthcare professionals for diagnosis and treatment
-- In case of medical emergency, seek immediate professional medical care
-- This system uses ML predictions to highlight potential risk areas, not to diagnose conditions
-
-ENSURE:
-- All recommendations are grounded in the provided medical context
-- No medical claims or guarantees
-- No hallucinations or advice not supported by the context
-- Clear and factual language
-- Appropriate tone: informative, cautious, and responsible
+Rules:
+- Use only the provided medical context and patient details.
+- Keep all recommendations evidence-grounded and non-diagnostic.
+- Include 2-4 concise recommendation items and 2-4 preventive measure items.
+- Include source_citations using the provided guideline context when possible.
+- The disclaimer must clearly say this is not a diagnosis and the user should consult a qualified healthcare professional.
+- Do not wrap the JSON in markdown fences.
 """
     
     return prompt

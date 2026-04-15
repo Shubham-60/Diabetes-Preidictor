@@ -2,7 +2,11 @@ streamlit
 numpy
 pandas
 scikit-learn
+joblib
 faiss-cpu
 sentence-transformers
 PyPDF2
 google-genai
+langchain-google-genai
+langgraph
+torchvision

@@ -1,11 +1,14 @@
 """
 Health Report Generation Module
-Creates structured health reports with AI and medical context
+Creates structured health reports with AI and medical context.
 """
 
-from typing import Dict, Any, List, Tuple
-import json
 from datetime import datetime
+import json
+from typing import Any, Dict, List
+
+ML_MODEL_NAME = "Logistic Regression (C=0.01)"
+KNOWLEDGE_BASE_NAME = "Medical Guidelines (WHO, IDF)"
 
 
 def generate_health_report(
@@ -121,10 +124,10 @@ def generate_health_report(
     # System Information
     report.append("\n" + "-" * 70)
     report.append("\nSYSTEM TECHNOLOGY:")
-    report.append("  - ML Model: Random Forest Classifier")
+    report.append(f"  - ML Model: {ML_MODEL_NAME}")
     report.append("  - LLM: Google Gemini")
     report.append("  - RAG Pipeline: PDF Chunking + FAISS Retrieval + CrossEncoder Reranking")
-    report.append("  - Knowledge Base: Medical Guidelines (WHO, ADA)")
+    report.append(f"  - Knowledge Base: {KNOWLEDGE_BASE_NAME}")
     report.append("  - Framework: Streamlit")
     
     report.append("\n" + "=" * 70)
@@ -169,9 +172,10 @@ def export_report_json(
         "ai_insights": ai_response,
         "disclaimer": "This is a screening tool only, not a medical diagnosis. Consult healthcare professionals.",
         "system_info": {
-            "ml_model": "Random Forest",
+            "ml_model": ML_MODEL_NAME,
             "llm": "Gemini",
-            "rag_method": "FAISS + SentenceTransformers + CrossEncoder"
+            "rag_method": "FAISS + SentenceTransformers + CrossEncoder",
+            "knowledge_base": KNOWLEDGE_BASE_NAME,
         }
     }
     
