@@ -2,6 +2,8 @@ import os
 import json
 import sys
 import time
+import html
+from textwrap import dedent
 from pathlib import Path
 
 import joblib
@@ -625,6 +627,149 @@ def inject_styles() -> None:
                 text-align: right;
             }
 
+            .llm-guidance-shell {
+                padding: 0.12rem 0.1rem 0.15rem;
+            }
+
+            .llm-guidance-title {
+                font-family: 'Plus Jakarta Sans', sans-serif;
+                font-size: 1.28rem;
+                font-weight: 740;
+                color: #0f172a;
+                margin-bottom: 0.18rem;
+                letter-spacing: -0.01em;
+            }
+
+            .llm-guidance-subtitle {
+                font-size: 0.9rem;
+                color: #475569;
+                margin-bottom: 0.78rem;
+            }
+
+            .llm-risk-strip {
+                border-radius: 12px;
+                padding: 0.62rem 0.72rem;
+                margin-bottom: 0.72rem;
+                border: 1px solid rgba(203, 213, 225, 0.7);
+                background: rgba(255, 255, 255, 0.72);
+                animation: llmCardIn 320ms ease both;
+            }
+
+            .llm-risk-strip.low {
+                border-color: rgba(20, 184, 166, 0.28);
+                background: linear-gradient(120deg, rgba(20, 184, 166, 0.11), rgba(255, 255, 255, 0.82));
+            }
+
+            .llm-risk-strip.medium {
+                border-color: rgba(245, 158, 11, 0.28);
+                background: linear-gradient(120deg, rgba(245, 158, 11, 0.11), rgba(255, 255, 255, 0.82));
+            }
+
+            .llm-risk-strip.high {
+                border-color: rgba(244, 63, 94, 0.28);
+                background: linear-gradient(120deg, rgba(244, 63, 94, 0.11), rgba(255, 255, 255, 0.82));
+            }
+
+            .llm-risk-label {
+                font-size: 0.76rem;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: #64748b;
+                margin-bottom: 0.18rem;
+                font-weight: 700;
+            }
+
+            .llm-risk-value {
+                font-size: 1.04rem;
+                font-weight: 700;
+                color: #0f172a;
+            }
+
+            .llm-grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.68rem;
+            }
+
+            .llm-section {
+                border-radius: 12px;
+                border: 1px solid rgba(226, 232, 240, 0.95);
+                background: rgba(255, 255, 255, 0.76);
+                padding: 0.68rem 0.72rem;
+                box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+                animation: llmCardIn 340ms ease both;
+                animation-delay: var(--llm-delay, 0ms);
+                transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+            }
+
+            .llm-section:hover {
+                transform: translateY(-1px);
+                border-color: rgba(148, 163, 184, 0.8);
+                box-shadow: 0 10px 20px rgba(15, 23, 42, 0.07);
+            }
+
+            .llm-section.full {
+                grid-column: 1 / -1;
+            }
+
+            .llm-section-title {
+                color: #0f172a;
+                font-size: 0.92rem;
+                font-weight: 700;
+                margin-bottom: 0.42rem;
+            }
+
+            .llm-body {
+                color: #334155;
+                font-size: 0.91rem;
+                line-height: 1.55;
+            }
+
+            .llm-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+
+            .llm-list li {
+                margin: 0 0 0.34rem;
+                padding-left: 0.82rem;
+                position: relative;
+            }
+
+            .llm-list li::before {
+                content: "";
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: #00c9a7;
+                position: absolute;
+                left: 0;
+                top: 0.48rem;
+            }
+
+            .llm-list li:last-child {
+                margin-bottom: 0;
+            }
+
+            .llm-list li.llm-empty {
+                color: #64748b;
+                font-style: italic;
+                padding-left: 0;
+            }
+
+            .llm-list li.llm-empty::before {
+                display: none;
+            }
+
+            .llm-disclaimer {
+                border-left: 3px solid rgba(245, 158, 11, 0.4);
+                background: rgba(255, 251, 235, 0.66);
+                border-radius: 8px;
+                padding: 0.5rem 0.58rem;
+                color: #475569;
+            }
+
             [data-testid="stExpander"] {
                 border: 1px solid rgba(255, 255, 255, 0.62) !important;
                 border-radius: 14px !important;
@@ -817,6 +962,17 @@ def inject_styles() -> None:
                 to { transform: rotate(360deg); }
             }
 
+            @keyframes llmCardIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
             @media (prefers-reduced-motion: reduce) {
                 *, *::before, *::after {
                     animation: none !important;
@@ -826,6 +982,10 @@ def inject_styles() -> None:
 
             @media (max-width: 900px) {
                 .metric-row {
+                    grid-template-columns: 1fr;
+                }
+
+                .llm-guidance-grid {
                     grid-template-columns: 1fr;
                 }
             }
@@ -902,6 +1062,98 @@ def section_header(title: str, caption: str, accent: str = "teal") -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def html_text(value) -> str:
+    text = "" if value is None else str(value)
+    return html.escape(text).replace("\n", "<br>")
+
+
+def html_list(items: list[str], empty_message: str) -> str:
+    cleaned = [str(item).strip() for item in items if str(item).strip()]
+    if not cleaned:
+        return f"<ul class='llm-list'><li class='llm-empty'>{html_text(empty_message)}</li></ul>"
+    entries = "".join(f"<li>{html_text(item)}</li>" for item in cleaned)
+    return f"<ul class='llm-list'>{entries}</ul>"
+
+
+def render_ai_guidance_panel() -> None:
+    parsed = parse_ai_response(st.session_state.ai_response)
+    risk_level = str(parsed.get("risk_level", "Unavailable")).strip() or "Unavailable"
+    risk_level_lower = risk_level.lower()
+    if "low" in risk_level_lower:
+        risk_tone = "low"
+    elif "medium" in risk_level_lower:
+        risk_tone = "medium"
+    else:
+        risk_tone = "high"
+
+    key_factors = st.session_state.key_factors
+    specialists = st.session_state.specialists
+    recommendations = parsed.get("recommendations", [])
+    preventive_measures = parsed.get("preventive_measures", [])
+    suggested_specialists = parsed.get("suggested_specialists", [])
+    disclaimer = parsed.get("disclaimer", "")
+    explanation = parsed.get("explanation", "")
+    source_citations = parsed.get("source_citations", [])
+
+    fallback_sources = [line.strip() for line in st.session_state.source_context.split("\n") if line.strip()]
+    combined_sources = source_citations or fallback_sources[:2]
+
+    sections_html = dedent(
+        f"""
+        <div class='llm-section' style='--llm-delay:40ms;'>
+            <div class='llm-section-title'>Key Risk Factors</div>
+            <div class='llm-body'>{html_list(key_factors, 'No key risk factors returned by the workflow.')}</div>
+        </div>
+        <div class='llm-section' style='--llm-delay:90ms;'>
+            <div class='llm-section-title'>Recommended Specialists</div>
+            <div class='llm-body'>{html_list(specialists, 'No specialist recommendation returned by the workflow.')}</div>
+        </div>
+        <div class='llm-section full' style='--llm-delay:140ms;'>
+            <div class='llm-section-title'>Clinical Explanation</div>
+            <div class='llm-body'>{html_text(explanation)}</div>
+        </div>
+        <div class='llm-section' style='--llm-delay:190ms;'>
+            <div class='llm-section-title'>Recommendations</div>
+            <div class='llm-body'>{html_list(recommendations, 'No recommendation items available.')}</div>
+        </div>
+        <div class='llm-section' style='--llm-delay:240ms;'>
+            <div class='llm-section-title'>Preventive Measures</div>
+            <div class='llm-body'>{html_list(preventive_measures, 'No preventive measures available.')}</div>
+        </div>
+        <div class='llm-section' style='--llm-delay:290ms;'>
+            <div class='llm-section-title'>Suggested Specialists</div>
+            <div class='llm-body'>{html_list(suggested_specialists, 'No additional specialists suggested.')}</div>
+        </div>
+        <div class='llm-section' style='--llm-delay:340ms;'>
+            <div class='llm-section-title'>Source References</div>
+            <div class='llm-body'>{html_list(combined_sources[:3], 'No source references available.')}</div>
+        </div>
+        <div class='llm-section full' style='--llm-delay:390ms;'>
+            <div class='llm-section-title'>Disclaimer</div>
+            <div class='llm-body llm-disclaimer'>{html_text(disclaimer)}</div>
+        </div>
+        """
+    ).strip()
+
+    panel_html = dedent(
+        f"""
+        <div class='llm-guidance-shell'>
+            <div class='llm-guidance-title'>AI Medical Guidance</div>
+            <div class='llm-guidance-subtitle'>Clinical interpretation and preventive recommendations generated from your submitted profile.</div>
+            <div class='llm-risk-strip {risk_tone}'>
+                <div class='llm-risk-label'>Risk Assessment</div>
+                <div class='llm-risk-value'>{html_text(risk_level)}</div>
+            </div>
+            <div class='llm-grid'>
+                {sections_html}
+            </div>
+        </div>
+        """
+    ).strip()
+
+    st.markdown(panel_html, unsafe_allow_html=True)
 
 
 def age_to_category(age_years: int) -> int:
@@ -1404,56 +1656,7 @@ def render_result() -> None:
         )
 
     with st.container(border=True):
-        st.subheader("AI Medical Guidance")
-
-        # --- Key Factors ---
-        st.markdown("### ⚠️ Key Risk Factors")
-        for f in st.session_state.key_factors:
-            st.write(f"• {f}")
-
-        # --- Specialists ---
-        st.markdown("### 👨‍⚕️ Recommended Specialists")
-        for specialist in st.session_state.specialists:
-            st.write(f"• {specialist}")
-
-        parsed = parse_ai_response(st.session_state.ai_response)
-
-        # --- Risk Level ---
-        st.markdown("### 🩺 Risk Assessment")
-        risk_level = parsed["risk_level"]
-        if "low" in risk_level.lower():
-            st.success(f"Risk Level: {risk_level}")
-        elif "medium" in risk_level.lower():
-            st.warning(f"Risk Level: {risk_level}")
-        else:
-            st.error(f"Risk Level: {risk_level}")
-
-        # --- Explanation ---
-        st.markdown("### 📋 Explanation")
-        st.write(parsed["explanation"])
-
-        # --- Recommendations ---
-        st.markdown("### 💡 Recommendations")
-        for item in parsed["recommendations"]:
-            st.write(f"• {item}")
-
-        # --- Preventive Measures ---
-        st.markdown("### 🛡 Preventive Measures")
-        for item in parsed["preventive_measures"]:
-            st.write(f"• {item}")
-
-        st.markdown("### 🧭 Suggested Specialists")
-        for item in parsed["suggested_specialists"]:
-            st.write(f"• {item}")
-
-        st.markdown("### ⚖ Disclaimer")
-        st.caption(parsed["disclaimer"])
-
-        # --- Source Context ---
-        st.markdown("### 📚 Source")
-        combined_sources = parsed["source_citations"] or st.session_state.source_context.split("\n")[:2]
-        for line in combined_sources[:3]:
-            st.caption(line)
+        render_ai_guidance_panel()
 
     with st.container(border=True):
         section_header("Input Summary", "Feature values used for this prediction", accent="teal")
