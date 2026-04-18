@@ -4,7 +4,6 @@ import json
 from google import genai
 
 FALLBACK_RESPONSE = {
-    "risk_level": "Unavailable",
     "explanation": "AI guidance is currently unavailable, so only the model prediction can be shown right now.",
     "recommendations": [
         "Review the predicted risk score with a healthcare professional.",

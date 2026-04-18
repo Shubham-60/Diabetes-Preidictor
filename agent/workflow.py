@@ -5,17 +5,38 @@ from typing import Any
 
 from agent.patient_mapping import build_rag_profile, map_inputs_for_llm
 
+SOURCE_DISPLAY_NAMES = {
+    "who_diabetes_diagnosis.pdf": "WHO guideline",
+    "idf_diabetes_management.pdf": "NICE guideline",
+}
+
+
+def _format_source_name(raw_source: str) -> str:
+    source = str(raw_source or "Guideline").strip()
+    source_key = source.lower()
+    if source_key in SOURCE_DISPLAY_NAMES:
+        return SOURCE_DISPLAY_NAMES[source_key]
+    if source.lower().endswith(".pdf"):
+        source = source[:-4]
+    source = source.replace("_", " ").replace("-", " ").strip()
+    normalized = " ".join(source.split())
+    return normalized.title() if normalized else "Guideline"
+
 
 def build_source_snippets(retrieved: Sequence[dict[str, Any]], reranked_texts: Sequence[str], limit: int = 2) -> str:
-    snippets: list[str] = []
+    sources: list[str] = []
+    seen: set[str] = set()
     for passage in reranked_texts[:limit]:
         source = "Guideline"
         for item in retrieved:
             if item["content"] == passage:
                 source = item.get("source", "Guideline")
                 break
-        snippets.append(f"[{source}] {passage[:180]}...")
-    return "\n".join(snippets)
+        cleaned_source = _format_source_name(str(source))
+        if cleaned_source not in seen:
+            seen.add(cleaned_source)
+            sources.append(cleaned_source)
+    return "\n".join(sources)
 
 
 def run_patient_workflow(

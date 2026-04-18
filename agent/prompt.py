@@ -27,12 +27,6 @@ def build_prompt(
         Formatted prompt string for Gemini
     """
     
-    risk_level = "Low"
-    if prob > 0.7:
-        risk_level = "High"
-    elif prob > 0.4:
-        risk_level = "Medium"
-    
     factors_text = "\n".join([f"- {factor}" for factor in factors]) if factors else "- General health indicators"
     departments_text = "\n".join([f"- {dept}" for dept in departments]) if departments else "- General Physician"
     
@@ -46,7 +40,6 @@ PATIENT ASSESSMENT DATA:
 
 MACHINE LEARNING PREDICTION:
 - Risk Probability: {prob:.2%}
-- Risk Level: {risk_level}
 
 KEY RISK FACTORS IDENTIFIED:
 {factors_text}
@@ -59,7 +52,6 @@ RECOMMENDED SPECIALISTS TO CONSULT:
 
 Return ONLY valid JSON with this schema:
 {{
-  "risk_level": string,
   "explanation": string,
   "recommendations": [string, string, string],
   "preventive_measures": [string, string, string],

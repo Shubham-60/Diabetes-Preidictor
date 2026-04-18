@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import sys
 import time
 import html
@@ -18,6 +19,11 @@ if str(PROJECT_ROOT) not in sys.path:
 from agent.langgraph_flow import build_graph
 from agent.patient_mapping import map_inputs_for_llm
 from agent.workflow import run_patient_workflow
+
+SOURCE_DISPLAY_NAMES = {
+    "who_diabetes_diagnosis.pdf": "WHO guideline",
+    "idf_diabetes_management.pdf": "NICE guideline",
+}
 
 THRESHOLD = 0.58
 FEATURE_ORDER = [
@@ -1077,16 +1083,69 @@ def html_list(items: list[str], empty_message: str) -> str:
     return f"<ul class='llm-list'>{entries}</ul>"
 
 
+def _format_source_name(raw_source: str) -> str:
+    source = str(raw_source or "").strip()
+    if not source:
+        return ""
+
+    source_key = source.lower().strip()
+    if source_key in SOURCE_DISPLAY_NAMES:
+        return SOURCE_DISPLAY_NAMES[source_key]
+
+    if re.fullmatch(r"\d+(?:\.\d+)+", source_key):
+        return ""
+
+    # Support patterns like "[source_name.pdf] summary text".
+    bracket_match = re.search(r"\[([^\]]+)\]", source)
+    if bracket_match:
+        source = bracket_match.group(1).strip()
+    elif ".pdf" in source.lower():
+        pdf_match = re.search(r"([A-Za-z0-9._-]+\.pdf)", source, flags=re.IGNORECASE)
+        source = pdf_match.group(1) if pdf_match else ""
+    elif ":" in source:
+        source = source.split(":", 1)[0].strip()
+    else:
+        words = source.split()
+        if len(words) > 6 or len(source) > 80:
+            return ""
+
+    if re.fullmatch(r"\d+(?:\.\d+)+", source.strip()):
+        return ""
+
+    normalized_source = " ".join(source.replace("_", " ").replace("-", " ").split())
+    if normalized_source.lower() == "type 2 diabetes in adults":
+        return "NICE guideline"
+
+    # Remove file extension even when followed by punctuation or mixed casing.
+    source = re.sub(r"\.pdf\b", "", source, flags=re.IGNORECASE)
+    source = source.rstrip(" .,:;-)\"]}")
+    source = source.replace("_", " ").replace("-", " ")
+    source = " ".join(source.split())
+    return source.title()
+
+
+def _extract_source_names(source_citations: list[str], source_context: str) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+
+    for line in source_context.split("\n"):
+        name = _format_source_name(line)
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name)
+
+    if not names:
+        for citation in source_citations:
+            name = _format_source_name(str(citation))
+            if name and name not in seen:
+                seen.add(name)
+                names.append(name)
+
+    return names
+
+
 def render_ai_guidance_panel() -> None:
     parsed = parse_ai_response(st.session_state.ai_response)
-    risk_level = str(parsed.get("risk_level", "Unavailable")).strip() or "Unavailable"
-    risk_level_lower = risk_level.lower()
-    if "low" in risk_level_lower:
-        risk_tone = "low"
-    elif "medium" in risk_level_lower:
-        risk_tone = "medium"
-    else:
-        risk_tone = "high"
 
     key_factors = st.session_state.key_factors
     specialists = st.session_state.specialists
@@ -1097,8 +1156,7 @@ def render_ai_guidance_panel() -> None:
     explanation = parsed.get("explanation", "")
     source_citations = parsed.get("source_citations", [])
 
-    fallback_sources = [line.strip() for line in st.session_state.source_context.split("\n") if line.strip()]
-    combined_sources = source_citations or fallback_sources[:2]
+    source_names = _extract_source_names(source_citations, st.session_state.source_context)
 
     sections_html = dedent(
         f"""
@@ -1128,7 +1186,7 @@ def render_ai_guidance_panel() -> None:
         </div>
         <div class='llm-section' style='--llm-delay:340ms;'>
             <div class='llm-section-title'>Source References</div>
-            <div class='llm-body'>{html_list(combined_sources[:3], 'No source references available.')}</div>
+            <div class='llm-body'>{html_list(source_names[:3], 'No source references available.')}</div>
         </div>
         <div class='llm-section full' style='--llm-delay:390ms;'>
             <div class='llm-section-title'>Disclaimer</div>
@@ -1142,10 +1200,6 @@ def render_ai_guidance_panel() -> None:
         <div class='llm-guidance-shell'>
             <div class='llm-guidance-title'>AI Medical Guidance</div>
             <div class='llm-guidance-subtitle'>Clinical interpretation and preventive recommendations generated from your submitted profile.</div>
-            <div class='llm-risk-strip {risk_tone}'>
-                <div class='llm-risk-label'>Risk Assessment</div>
-                <div class='llm-risk-value'>{html_text(risk_level)}</div>
-            </div>
             <div class='llm-grid'>
                 {sections_html}
             </div>
@@ -1312,7 +1366,6 @@ def run_ai_pipeline(raw_inputs: dict, model_features: dict, probability: float):
 
 def parse_ai_response(text: str) -> dict:
     fallback = {
-        "risk_level": "Unavailable",
         "explanation": text.strip() or "AI explanation unavailable.",
         "recommendations": [],
         "preventive_measures": [],
@@ -1325,7 +1378,6 @@ def parse_ai_response(text: str) -> dict:
         parsed = json.loads(text)
         if isinstance(parsed, dict):
             return {
-                "risk_level": str(parsed.get("risk_level", fallback["risk_level"])),
                 "explanation": str(parsed.get("explanation", fallback["explanation"])),
                 "recommendations": list(parsed.get("recommendations", [])),
                 "preventive_measures": list(parsed.get("preventive_measures", [])),
