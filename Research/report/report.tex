@@ -6,13 +6,13 @@
 \usepackage[a4paper, margin=1in]{geometry}
 \usepackage{hyperref}
 
-\title{Diabetes Risk Prediction using Machine Learning}
+\title{Diabetes Risk Prediction and Guideline-Grounded Recommendation System}
 \author{
 \begin{tabular}{ccc}
 Shubham Aggarwal & Atharva Sharma & Bhavya Punj \\
 \end{tabular}
 \\[0.5cm]
-\textit{Milestone 1 Project}
+\textit{Final Project}
 }
 \date{\today}
 
@@ -20,101 +20,78 @@ Shubham Aggarwal & Atharva Sharma & Bhavya Punj \\
 
 \maketitle
 
-% --------------------------------------------------
+\begin{abstract}
+This project combines a deployed logistic-regression screening model with a guideline-grounded retrieval and language-generation layer. The Streamlit application collects patient health indicators, computes a diabetes risk probability from the shipped model artifacts, extracts salient risk factors, retrieves relevant passages from medical guideline PDFs using FAISS and a CrossEncoder reranker, and produces structured JSON guidance through Gemini with a safe fallback when the API key is unavailable.
+\end{abstract}
 
-\section{Introduction}
+\section{Project Overview}
 
-Early detection of diabetes is critical in preventive healthcare. This project aims to develop a machine learning-based system to predict diabetes risk using health indicators. The objective is to build a reliable classification model that balances predictive performance while minimizing both false positives and false negatives.
+Early detection of diabetes is important because screening systems can help flag elevated risk before complications develop. The current project is not only a classifier; it is a complete screening and guidance workflow that takes user inputs, predicts risk, explains the main factors, recommends appropriate specialists, and grounds the final recommendations in guideline passages.
 
-% --------------------------------------------------
+The runtime application is the Streamlit interface in \texttt{app/streamlit\_app.py}, with a thin launcher in \texttt{Final/streamlit\_app.py}. The app loads a pretrained logistic-regression model and scaler from \texttt{models/lr\_model.pkl} and \texttt{models/scaler.pkl}, then uses a LangGraph pipeline for the downstream recommendation flow.
 
-\section{Dataset Description}
+\section{Dataset and Feature Set}
 
-The dataset used is the \textbf{\href{https://www.kaggle.com/datasets/alexteboul/diabetes-health-indicators-dataset}{Diabetes Health Indicators Dataset}}.
+The model was trained from the BRFSS 2015 diabetes health indicators dataset, available on Kaggle as the Diabetes Health Indicators Dataset.
 
-It is derived from the \textbf{BRFSS 2015 survey} conducted by the CDC and contains approximately \textbf{253,680 records} with 21 features and one binary target variable.
+The exported training script in \texttt{Research/Final-(model)/export\_model.py} reads \texttt{Research/data/dataset\_binary.csv}, removes redundant columns, standardizes the selected inputs, optionally balances the classes with SMOTE, and fits a logistic-regression classifier.
 
-\textbf{Target Variable:}
+\textbf{Data characteristics:}
 \begin{itemize}
-\item 0: Non-diabetic
-\item 1: Diabetic or pre-diabetic
+\item Approximately 253,680 records
+\item Binary target: \texttt{Diabetes\_binary}
+\item Feature set used by the deployed classifier: 19 variables
+\item Removed during export: \texttt{Stroke} and \texttt{HeartDiseaseorAttack}
 \end{itemize}
 
-% --------------------------------------------------
-
-\section{Feature Encoding}
-
-Several features in the dataset are encoded categorical variables:
-
-\textbf{Age:}
-Categorized into 13 groups:
-\begin{itemize}
-\item 1: 18–24
-\item 2: 25–29
-\item 3: 30–34
-\item 4: 35–39
-\item 5: 40–44
-\item 6: 45–49
-\item 7: 50–54
-\item 8: 55–59
-\item 9: 60–64
-\item 10: 65–69
-\item 11: 70–74
-\item 12: 75–79
-\item 13: 80+
-\end{itemize}
-
-\textbf{Education (Grade Level):}
-\begin{itemize}
-\item 1: No formal education (Kindergarten or below)
-\item 2: Grades 1–8 (Elementary)
-\item 3: Grades 9–11 (Some high school)
-\item 4: Grade 12 / GED (High school graduate)
-\item 5: Grades 13–15 (Undergraduate / College 1–3 years)
-\item 6: Grade 16+ (College graduate or higher)
-\end{itemize}
-
-\textbf{Income:}
-\begin{itemize}
-\item 1: Less than \$10,000
-\item 2: \$10,000 – \$15,000
-\item 3: \$15,000 – \$20,000
-\item 4: \$20,000 – \$25,000
-\item 5: \$25,000 – \$35,000
-\item 6: \$35,000 – \$50,000
-\item 7: \$50,000 – \$75,000
-\item 8: \$75,000 or more
-\end{itemize}
-
-\textbf{General Health (GenHlth):}
-\begin{itemize}
-\item 1: Excellent
-\item 2: Very good
-\item 3: Good
-\item 4: Fair
-\item 5: Poor
-\end{itemize}
-
-These encodings preserve ordinal relationships and improve model learning.
-
-% --------------------------------------------------
-
-\section{Data Preprocessing}
-
-The following preprocessing steps were applied:
+The exact model feature order is stored in \texttt{models/model\_metadata.json}:
 
 \begin{itemize}
-\item Removal of redundant features: Stroke, HeartDiseaseorAttack
-\item Removal of duplicate records
-\item Feature scaling using StandardScaler
-\item Handling class imbalance using SMOTE
+\item \texttt{HighBP}, \texttt{HighChol}, \texttt{CholCheck}, \texttt{BMI}
+\item \texttt{Smoker}, \texttt{PhysActivity}, \texttt{Fruits}, \texttt{Veggies}
+\item \texttt{HvyAlcoholConsump}, \texttt{AnyHealthcare}, \texttt{NoDocbcCost}
+\item \texttt{GenHlth}, \texttt{MentHlth}, \texttt{PhysHlth}, \texttt{DiffWalk}
+\item \texttt{Sex}, \texttt{Age}, \texttt{Education}, \texttt{Income}
 \end{itemize}
 
-% --------------------------------------------------
+The UI also collects glucose as a user-facing input for risk-factor analysis and guideline retrieval, but it is not part of the classifier feature vector. This separation is intentional and reflected in \texttt{app/streamlit\_app.py}.
 
-\section{Model Development}
+\section{Model Development and Deployment}
 
-Four models were implemented:
+The training/export path is intentionally simple and reproducible. The final artifact set contains:
+
+\begin{itemize}
+\item \texttt{lr\_model.pkl}
+\item \texttt{scaler.pkl}
+\item \texttt{model\_metadata.json}
+\end{itemize}
+
+The export script standardizes the selected features with \texttt{StandardScaler}, applies SMOTE when available, and fits \texttt{LogisticRegression(C=0.01, max\_iter=1000, random\_state=42)}. The deployed decision threshold is 0.58, which is also recorded in the metadata file and used by the Streamlit app.
+
+The app loads the model artifacts at runtime and computes the probability of the positive class. The displayed risk label is derived from the threshold rather than from a hardcoded class prediction, which makes the UI easier to interpret during screening.
+
+\subsection*{Why Logistic Regression}
+
+\begin{itemize}
+\item It is transparent and easy to audit for a healthcare screening use case.
+\item It supports stable probability outputs for threshold-based decision making.
+\item It is lightweight enough for a Streamlit deployment with cached artifacts.
+\end{itemize}
+
+\subsection*{Feature Handling}
+
+\begin{itemize}
+\item Categorical fields such as education and income are mapped to ordinal codes.
+\item Binary health indicators are converted to 0/1 features.
+\item Age is converted into the category scheme used by the model.
+\item The model input order is fixed to match the exported artifact metadata.
+\end{itemize}
+
+\section{Research Benchmark and Model Selection Rationale}
+
+Before freezing the deployment pipeline, we benchmarked multiple classifiers during the research phase and compared their screening-oriented performance. These benchmark results motivated the final choice of logistic regression for production use.
+
+\subsection*{Benchmark Models}
 
 \begin{itemize}
 \item Logistic Regression (LR)
@@ -123,11 +100,7 @@ Four models were implemented:
 \item Artificial Neural Network (ANN)
 \end{itemize}
 
-All models were trained under consistent conditions using SMOTE, hyperparameter tuning, and threshold optimization.
-
-% --------------------------------------------------
-
-\section{Model Evaluation}
+\subsection*{Benchmark Metrics (Research Phase)}
 
 \begin{table}[h]
 \centering
@@ -141,162 +114,173 @@ XGBoost & 0.786 & 0.378 & 0.609 & 0.466 \\
 ANN & 0.782 & 0.374 & 0.622 & 0.467 \\
 \bottomrule
 \end{tabular}
-\caption{Performance Comparison of Models}
+\caption{Research-phase benchmark comparison across candidate models}
 \end{table}
 
-All models show comparable performance. ANN achieved the highest F1-score, while XGBoost achieved the highest AUC.
+These values are retained from the milestone benchmarking stage and are included here to document the model selection process.
 
-% --------------------------------------------------
-
-\section{Confusion Matrix Analysis}
+\subsection*{Confusion Matrix Comparison}
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.5\textwidth]{cm_lr.png}
-\caption{Confusion Matrix for Logistic Regression}
+\includegraphics[width=0.48\textwidth]{cm_lr.png}
+\caption{Confusion Matrix for Logistic Regression (research phase)}
 \end{figure}
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.5\textwidth]{cm_ann.png}
-\caption{Confusion Matrix for ANN}
+\includegraphics[width=0.48\textwidth]{cm_ann.png}
+\caption{Confusion Matrix for ANN (research phase)}
 \end{figure}
 
-\textbf{Observations:}
-\begin{itemize}
-\item Logistic Regression produces fewer false negatives
-\item ANN achieves slightly better balance but misses more diabetic cases
-\item Logistic Regression is more reliable for healthcare screening
-\end{itemize}
+\subsection*{Why Logistic Regression Was Deployed}
 
-% --------------------------------------------------
-
-\section{Final Model Selection}
-
-Logistic Regression was selected as the final model due to:
+Although ANN and XGBoost showed slightly better aggregate metrics in some benchmark views, logistic regression was selected for deployment because it offered a favorable trade-off for healthcare screening:
 
 \begin{itemize}
-\item Higher Recall (0.654)
-\item Lower False Negatives
-\item Better suitability for healthcare applications
+\item stronger recall profile for identifying at-risk users during the benchmark phase,
+\item lower false-negative tendency in screening-oriented interpretation,
+\item simpler and more transparent behavior for auditability,
+\item lightweight inference for reliable Streamlit deployment.
 \end{itemize}
 
-In healthcare, minimizing false negatives is critical as missing a diabetic patient can have serious consequences.
+In screening scenarios, missing truly at-risk patients is often costlier than raising additional follow-up checks. This practical consideration is central to the final deployment decision.
 
-% --------------------------------------------------
+\section{User Interface and Prediction Flow}
 
-\section{Final Model Pipeline}
+The Streamlit interface is the user entry point. It is split into lifestyle, medical history, health condition, and demographic sections to make data entry understandable for non-technical users. After form submission, the app stores the raw inputs, transforms the classifier features, and then routes the request into the AI workflow.
+
+The end-to-end flow is:
 
 \begin{itemize}
-\item StandardScaler
-\item SMOTE
-\item Logistic Regression (C = 0.01)
-\item Threshold = 0.58
+\item collect user inputs in the Streamlit form
+\item transform the feature vector and compute risk probability
+\item extract notable risk factors from the raw inputs
+\item recommend suitable specialists
+\item retrieve and rerank guideline passages
+\item build a structured prompt
+\item generate a JSON response through Gemini or a fallback response
 \end{itemize}
 
-The model was retrained on the full dataset for deployment.
+The app also includes a short debug trace mode, cached artifact loading, and a graceful fallback if the Gemini API key is missing or the model artifacts are unavailable.
 
-% --------------------------------------------------
+\section{Risk Factor and Specialist Logic}
 
-\section{Deployment}
+The risk-factor extraction logic is implemented in \texttt{agent/utils.py}. It looks for clinically relevant patterns in the user inputs, including:
 
-The model is deployed using a Streamlit application:
+\begin{itemize}
+\item elevated or borderline glucose
+\item high BMI or overweight status
+\item high blood pressure and high cholesterol
+\item smoking, low activity, low fruit and vegetable intake, and heavy alcohol use
+\item age-related risk
+\end{itemize}
+
+If no major signal is found, the system returns a neutral explanation rather than fabricating a risk factor.
+
+Specialist recommendations are generated in \texttt{agent/doctor.py}. The logic is rule-based and favors endocrinology for higher probabilities, cardiology for blood-pressure-related concern, nutrition support for high BMI, and a general physician as the default fallback.
+
+\section{Retrieval-Augmented Generation}
+
+The guidance layer is built around two guideline PDFs in \texttt{data/guidelines}:
+
+\begin{itemize}
+\item \texttt{who\_diabetes\_diagnosis.pdf}
+\item \texttt{idf\_diabetes\_management.pdf}
+\end{itemize}
+
+The second local file (\texttt{idf\_diabetes\_management.pdf}) is sourced from NICE guideline NG28: Type 2 diabetes in adults: management.
+
+The retrieval pipeline is implemented in \texttt{agent/rag\_faiss.py} and works as follows:
+
+\begin{itemize}
+\item PDF text is extracted with \texttt{PyPDF2}
+\item Text is chunked into 150-word windows with 30-word overlap
+\item Chunks are embedded using \texttt{all-MiniLM-L6-v2}
+\item A FAISS L2 index stores and searches the embeddings
+\item Candidate passages are reranked with \texttt{cross-encoder/ms-marco-MiniLM-L-6-v2}
+\end{itemize}
+
+The app then combines the reranked passages into a compact context string for prompt construction. This keeps the generated response anchored to retrieved medical text rather than relying on the language model alone.
+
+\subsection*{LangGraph Orchestration}
+
+The workflow graph in \texttt{agent/langgraph\_flow.py} is linear and explicit:
 
 \begin{center}
-\href{https://diabetespreidictor.streamlit.app/}{\textbf{Live Application Link}}
+ML Prediction $\rightarrow$ Risk Factors $\rightarrow$ Specialist Recommendation $\rightarrow$ Retrieval $\rightarrow$ LLM Response
 \end{center}
 
-The application:
-\begin{itemize}
-\item Collects user health data
-\item Predicts diabetes probability
-\item Displays risk classification
-\end{itemize}
+This structure makes each stage inspectable and easy to debug. The higher-level wrapper in \texttt{agent/workflow.py} also normalizes source names for presentation in the UI.
 
-% --------------------------------------------------
+\section{LLM Response Format}
 
-\section{Advanced RAG Refactor (FAISS + Gemini)}
-
-The project was refactored from a baseline retrieval setup to an advanced document-grounded RAG stack with vector indexing and reranking.
-
-\subsection*{System Flow}
-
-\begin{center}
-Input $\rightarrow$ ML Prediction $\rightarrow$ Factor Extraction $\rightarrow$ PDF Loading $\rightarrow$ Chunking $\rightarrow$ Embedding $\rightarrow$ FAISS Search $\rightarrow$ CrossEncoder Rerank $\rightarrow$ Prompt $\rightarrow$ Gemini Output
-\end{center}
-
-\subsection*{Vector Database and Embeddings}
+The prompt builder in \texttt{agent/prompt.py} instructs Gemini to return a strict JSON object containing:
 
 \begin{itemize}
-\item PDF guidelines are parsed using PyPDF2.
-\item Text is chunked into fixed-length passages.
-\item Sentence embeddings are generated with \texttt{all-MiniLM-L6-v2}.
-\item Embeddings are indexed with FAISS (L2 similarity index).
-\item Top-k relevant chunks are retrieved for each user-specific risk query.
+\item an explanation of the risk result
+\item practical recommendations
+\item preventive measures
+\item suggested specialists
+\item source citations
+\item a screening-only disclaimer
 \end{itemize}
 
-\subsection*{Reranking Layer}
+The Gemini wrapper in \texttt{agent/llm.py} uses \texttt{gemini-2.5-flash} when \texttt{GEMINI\_API\_KEY} is available. If the API key is missing or the request fails, the system returns a deterministic fallback JSON payload so the app can still render a complete result page.
 
-Initial FAISS results are reranked using a CrossEncoder model (\texttt{cross-encoder/ms-marco-MiniLM-L-6-v2}) to improve semantic relevance before prompt construction.
+The response parser in the Streamlit app validates the JSON and degrades safely if the returned text is malformed.
 
-\subsection*{Prompt Grounding and Generation}
+\section{Implementation Notes}
 
-The final prompt includes:
 \begin{itemize}
-\item ML probability and risk level
-\item Extracted risk factors
-\item Reranked guideline context
-\item Recommended specialists
+\item The deployed application uses cached artifact loading to avoid repeated model deserialization.
+\item The UI presents a risk percentage and a high/low label computed from the 0.58 threshold.
+\item The source labels shown to users are normalized for readability in the result panel.
+\item The system is designed as a screening aid and explicitly avoids presenting itself as a diagnostic tool.
 \end{itemize}
 
-Gemini is used for the final response generation with responsible AI disclaimers and non-diagnostic framing.
+\section{Limitations and Future Work}
 
-\subsection*{LoRA Configuration (Report Scope)}
+The current system is intentionally constrained to a small, well-defined guideline corpus and a single deployed classifier. That makes the pipeline easier to audit, but it also limits generalization to broader medical scenarios.
 
-For future fine-tuning experiments, a LoRA configuration is planned with:
+Potential next steps include:
+
 \begin{itemize}
-\item rank $r=8$
-\item \texttt{lora\_alpha=16}
-\item target modules: \texttt{q\_proj}, \texttt{v\_proj}
-\item dropout $=0.1$
+\item adding explainability outputs such as SHAP-based feature attributions
+\item expanding the RAG corpus with additional trusted clinical sources
+\item introducing evaluation logging for the deployed screening workflow
+\item formalizing calibration and threshold analysis for different risk tolerances
 \end{itemize}
 
-This is documented for extensibility and was not executed in the current deployment.
+\section{Conclusion}
 
-% --------------------------------------------------
+This project delivers a complete diabetes risk screening and guidance application rather than a standalone classifier. The deployed logistic-regression model provides the risk score, the retrieval layer grounds the advice in guideline text, and the Gemini-backed JSON response packages the result into a user-facing recommendation panel. The architecture is lightweight, reproducible, and aligned with a healthcare screening workflow.
 
 \section{Project Resources}
 
 \begin{itemize}
-\item \textbf{Stage 1:} \href{https://colab.research.google.com/drive/1afKjobnAKRFcwjhJcjtyHykuLArL1Ksc}{Notebook}
-\item \textbf{Stage 2:} \href{https://colab.research.google.com/drive/1ihrrm2ARWfcX3qEfP6SPwClrs9_sfYhn}{Notebook}
-\item \textbf{Final Model:} \href{https://colab.research.google.com/drive/1pCnNA_h9pjJY3jj51gcATk05sWy1TPg1}{Notebook}
+\item Live app: \href{https://diabetespreidictor.streamlit.app/}{Diabetes Risk Predictor}
+\item Runtime entry point: \texttt{app/streamlit\_app.py}
+\item Model export script: \texttt{Research/Final-(model)/export\_model.py}
+\item RAG implementation: \texttt{agent/rag\_faiss.py}
 \end{itemize}
-
-% --------------------------------------------------
-
-\section{Conclusion}
-
-This project demonstrates a complete machine learning workflow for diabetes prediction. Logistic Regression was selected due to its strong recall and lower false negative rate, making it more suitable for healthcare applications.
-
-% --------------------------------------------------
-
-\section{Future Work}
-
-\begin{itemize}
-\item Integration with AI assistants
-\item Model explainability (SHAP/LIME)
-\item Real-time monitoring systems
-\end{itemize}
-
-% --------------------------------------------------
 
 \begin{thebibliography}{9}
 
 \bibitem{kaggle_dataset}
 A. Teboul,
-\textit{Diabetes Health Indicators Dataset}, Kaggle. 
+\textit{Diabetes Health Indicators Dataset}, Kaggle.
 \href{https://www.kaggle.com/datasets/alexteboul/diabetes-health-indicators-dataset}{Link}
+
+\bibitem{who}
+World Health Organization,
+\textit{Classification of Diabetes Mellitus}, 2019.
+\href{https://apps.who.int/iris/bitstream/handle/10665/325182/9789241515702-eng.pdf}{Link}
+
+\bibitem{guidelines}
+National Institute for Health and Care Excellence (NICE),
+\textit{Type 2 diabetes in adults: management (NG28)}.
+\href{https://www.nice.org.uk/guidance/ng28/resources/type-2-diabetes-in-adults-management-pdf-1837338615493}{Download guidance (PDF)}
 
 \end{thebibliography}
 
