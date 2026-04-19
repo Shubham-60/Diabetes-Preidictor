@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from agent.langgraph_flow import build_graph
 from agent.patient_mapping import map_inputs_for_llm
 from agent.workflow import run_patient_workflow
+from config import has_gemini_api_key
 
 SOURCE_DISPLAY_NAMES = {
     "who_diabetes_diagnosis.pdf": "WHO guideline",
@@ -50,7 +51,6 @@ FEATURE_ORDER = [
 APP_DIR = PROJECT_ROOT
 MODEL_PATH = APP_DIR / "models" / "lr_model.pkl"
 SCALER_PATH = APP_DIR / "models" / "scaler.pkl"
-ENV_PATH = APP_DIR / ".env"
 
 INCOME_OPTIONS = {
     "Less than $10,000": 1,
@@ -1148,7 +1148,6 @@ def render_ai_guidance_panel() -> None:
     parsed = parse_ai_response(st.session_state.ai_response)
 
     key_factors = st.session_state.key_factors
-    specialists = st.session_state.specialists
     recommendations = parsed.get("recommendations", [])
     preventive_measures = parsed.get("preventive_measures", [])
     suggested_specialists = parsed.get("suggested_specialists", [])
@@ -1163,10 +1162,6 @@ def render_ai_guidance_panel() -> None:
         <div class='llm-section' style='--llm-delay:40ms;'>
             <div class='llm-section-title'>Key Risk Factors</div>
             <div class='llm-body'>{html_list(key_factors, 'No key risk factors returned by the workflow.')}</div>
-        </div>
-        <div class='llm-section' style='--llm-delay:90ms;'>
-            <div class='llm-section-title'>Recommended Specialists</div>
-            <div class='llm-body'>{html_list(specialists, 'No specialist recommendation returned by the workflow.')}</div>
         </div>
         <div class='llm-section full' style='--llm-delay:140ms;'>
             <div class='llm-section-title'>Clinical Explanation</div>
@@ -1226,22 +1221,6 @@ def age_to_category(age_years: int) -> int:
     return 13
 
 
-def ensure_gemini_api_key() -> bool:
-    if os.getenv("GEMINI_API_KEY"):
-        return True
-    if not ENV_PATH.exists():
-        return False
-    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        if key.strip() == "GEMINI_API_KEY":
-            os.environ["GEMINI_API_KEY"] = value.strip().strip('"').strip("'")
-            return bool(os.environ["GEMINI_API_KEY"])
-    return False
-
-
 @st.cache_resource(show_spinner=False)
 def load_model_artifacts():
     if not MODEL_PATH.exists() or not SCALER_PATH.exists():
@@ -1298,7 +1277,7 @@ def _debug_console(title: str, payload) -> None:
 
 
 def run_ai_pipeline(raw_inputs: dict, model_features: dict, probability: float):
-    from agent.llm import generate_ai_response
+    from core.llm import generate_ai_response
     from agent.prompt import build_prompt
     from agent.rag_faiss import chunk_text, search
     from agent.reranker import rerank
@@ -1783,8 +1762,8 @@ def main() -> None:
     init_session_state()
     inject_styles()
 
-    if not ensure_gemini_api_key():
-        st.warning("GEMINI_API_KEY not found in environment or .env. AI recommendation may be unavailable.")
+    if not has_gemini_api_key():
+        st.warning("GEMINI_API_KEY not found in Streamlit secrets, environment, or .env. AI recommendation may be unavailable.")
 
     if st.session_state.page == "form":
         render_form()

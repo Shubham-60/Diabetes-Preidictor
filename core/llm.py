@@ -1,7 +1,10 @@
-import os
+from __future__ import annotations
+
 import json
 
-from google import genai
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+from config import get_gemini_api_key
 
 FALLBACK_RESPONSE = {
     "explanation": "AI guidance is currently unavailable, so only the model prediction can be shown right now.",
@@ -20,27 +23,35 @@ FALLBACK_RESPONSE = {
     "disclaimer": "This assessment is a screening aid only and not a medical diagnosis. Please consult a qualified healthcare professional.",
 }
 
+
 def _fallback_response_json() -> str:
     return json.dumps(FALLBACK_RESPONSE)
 
 
-def _get_client():
-    api_key = os.getenv("GEMINI_API_KEY")
+def _get_llm():
+    api_key = get_gemini_api_key()
     if not api_key:
         return None
-    return genai.Client(api_key=api_key)
+    try:
+        return ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=api_key,
+            temperature=0.3,
+        )
+    except Exception:
+        return None
 
 
 def generate_ai_response(prompt: str) -> str:
-    client = _get_client()
-    if client is None:
+    llm = _get_llm()
+    if llm is None:
         return _fallback_response_json()
 
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        return response.text or _fallback_response_json()
+        response = llm.invoke(prompt)
+        content = getattr(response, "content", None)
+        if isinstance(content, str) and content:
+            return content
+        return _fallback_response_json()
     except Exception:
         return _fallback_response_json()

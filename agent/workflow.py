@@ -79,7 +79,7 @@ def run_patient_workflow(
 
         prompt_fn = build_prompt
     if response_fn is None:
-        from agent.llm import generate_ai_response
+        from core.llm import generate_ai_response
 
         response_fn = generate_ai_response
 
